@@ -66,3 +66,4 @@ class WebCache:
         html_content = response.text
         self._redis.setex(cache_key, 10, html_content)
         return html_content
+        
