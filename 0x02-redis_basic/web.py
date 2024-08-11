@@ -8,7 +8,7 @@ import requests
 from typing import Callable
 from functools import wraps
 
-def count_access(method: Callable) -> Callable:
+def url_access_count(method: Callable) -> Callable:
     """
     Decorator to count the number of times a URL is accessed.
 
@@ -19,7 +19,7 @@ def count_access(method: Callable) -> Callable:
         Callable: The decorated method.
     """
     @wraps(method)
-    def wrapper(self, url: str) -> str:
+    def wrapper(url: str) -> str:
         """
         Wrapper function to count URL accesses and call the original method.
 
@@ -29,40 +29,32 @@ def count_access(method: Callable) -> Callable:
         Returns:
             str: The HTML content of the URL.
         """
-        redis_instance = method.__self__._redis
         count_key = f"count:{url}"
-        redis_instance.incr(count_key)
-        return method(self, url)
+        cache_key = f"cached:{url}"
+        
+        r.incr(count_key)
+        cached_value = r.get(cache_key)
+        if cached_value:
+            return cached_value.decode("utf-8")
+
+        html_content = method(url)
+        r.setex(cache_key, 10, html_content)
+        return html_content
     return wrapper
 
-class WebCache:
+@url_access_count
+def get_page(url: str) -> str:
     """
-    WebCache class for fetching and caching web pages.
+    Fetch the HTML content of a URL and cache it in Redis.
+
+    Args:
+        url (str): The URL to fetch.
+
+    Returns:
+        str: The HTML content of the URL.
     """
+    response = requests.get(url)
+    return response.text
 
-    def __init__(self):
-        """
-        Initialize the WebCache class.
-        """
-        self._redis = redis.Redis()
-
-    @count_access
-    def get_page(self, url: str) -> str:
-        """
-        Fetch the HTML content of a URL and cache it in Redis.
-
-        Args:
-            url (str): The URL to fetch.
-
-        Returns:
-            str: The HTML content of the URL.
-        """
-        cache_key = f"cache:{url}"
-        cached_page = self._redis.get(cache_key)
-        if cached_page:
-            return cached_page.decode('utf-8')
-
-        response = requests.get(url)
-        html_content = response.text
-        self._redis.setex(cache_key, 10, html_content)
-        return html_content
+if __name__ == "__main__":
+    get_page('http://slowwly.robertomurray.co.uk')
